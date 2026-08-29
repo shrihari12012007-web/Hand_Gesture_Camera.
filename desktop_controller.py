@@ -289,7 +289,7 @@ while True:
                     previous_x = current_x
                     previous_y = current_y
 
-            # =============================================
+           # =============================================
             # 2 FINGERS -> VOLUME UP
             # =============================================
             elif (
@@ -300,11 +300,9 @@ while True:
             ):
                 gesture = "TWO FINGERS - VOLUME UP"
                 if now - last_volume > volume_delay:
-                    if volume_available:
-                        current = volume.GetMasterVolumeLevelScalar()
-                        new_volume = min(1.0, current + 0.05)
-                        volume.SetMasterVolumeLevelScalar(new_volume, None)
-                        print("VOLUME:", int(new_volume * 100), "%")
+                    pyautogui.press("volumeup")
+                    pyautogui.press("volumeup")  # Twice for a faster volume step
+                    print("VOLUME: UP (+)")
                     last_volume = now
 
             # =============================================
@@ -318,11 +316,9 @@ while True:
             ):
                 gesture = "FIST - VOLUME DOWN"
                 if now - last_volume > volume_delay:
-                    if volume_available:
-                        current = volume.GetMasterVolumeLevelScalar()
-                        new_volume = max(0.0, current - 0.05)
-                        volume.SetMasterVolumeLevelScalar(new_volume, None)
-                        print("VOLUME:", int(new_volume * 100), "%")
+                    pyautogui.press("volumedown")
+                    pyautogui.press("volumedown")  # Twice for a faster volume step
+                    print("VOLUME: DOWN (-)")
                     last_volume = now
 
     # =====================================================
