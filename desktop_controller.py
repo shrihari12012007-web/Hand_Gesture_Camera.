@@ -1,11 +1,53 @@
 import cv2
 import os
+import sys
 import time
 import math
+import platform
 import numpy as np
 import pyautogui
 from datetime import datetime
 from hand_gesture import HandGesture
+
+
+# =====================================================
+# OS PLATFORM CONFIGURATION
+# =====================================================
+
+IS_MAC = platform.system() == "Darwin"
+IS_WINDOWS = platform.system() == "Windows"
+
+
+def press_search():
+    """Trigger System Search (Win + S on Windows, Command + Space on Mac)"""
+    if IS_MAC:
+        pyautogui.hotkey("command", "space")
+    else:
+        pyautogui.hotkey("win", "s")
+
+
+def switch_desktop(direction):
+    """Switch virtual desktops"""
+    if IS_MAC:
+        pyautogui.hotkey("ctrl", direction)
+    else:
+        pyautogui.hotkey("ctrl", "win", direction)
+
+
+def open_task_view():
+    """Open Task View / Mission Control"""
+    if IS_MAC:
+        pyautogui.hotkey("ctrl", "up")
+    else:
+        pyautogui.hotkey("win", "tab")
+
+
+def show_desktop():
+    """Show / Hide Desktop"""
+    if IS_MAC:
+        pyautogui.hotkey("command", "f3")
+    else:
+        pyautogui.hotkey("win", "d")
 
 
 # =====================================================
@@ -16,25 +58,26 @@ pyautogui.PAUSE = 0
 pyautogui.FAILSAFE = False
 
 screen_width, screen_height = pyautogui.size()
-print("Screen size:", screen_width, "x", screen_height)
+print(f"OS: {platform.system()} | Screen size: {screen_width} x {screen_height}")
 
 
 # =====================================================
-# CAMERA
+# CAMERA SETUP
 # =====================================================
 
 print("Starting camera...")
-
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+if IS_WINDOWS:
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+else:
+    cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
-    print("DirectShow failed. Trying default camera...")
     cap.release()
     cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     print("ERROR: Camera could not be opened.")
-    exit()
+    sys.exit()
 
 print("Camera opened successfully!")
 
@@ -46,33 +89,35 @@ time.sleep(1)
 
 
 # =====================================================
-# HAND DETECTOR
+# HAND DETECTOR INITIALIZATION
 # =====================================================
 
 hand_detector = HandGesture()
 
 
 # =====================================================
-# TIMERS & SWIPE STATE
+# TIMERS & COOLDOWNS
 # =====================================================
 
-last_capture = 0
+last_screenshot = 0
 last_click = 0
 last_volume = 0
 last_swipe = 0
+last_search = 0
 
-capture_delay = 2.0
-click_delay = 0.5
-volume_delay = 0.25  # Fast and responsive volume adjustments
-swipe_delay = 0.8
+screenshot_delay = 2.0
+click_delay = 0.4
+volume_delay = 0.25
+swipe_delay = 0.75
+search_delay = 1.5
 
-# Swipe tracking variables
+# Swipe coordinates tracking
 swipe_start_x = None
 swipe_start_y = None
 
 
 # =====================================================
-# MOUSE SMOOTHING & SENSITIVITY CONFIG
+# MOUSE SMOOTHING & BOUNDS CONFIG
 # =====================================================
 
 previous_x = screen_width // 2
@@ -81,7 +126,7 @@ previous_y = screen_height // 2
 smoothening = 3
 deadzone = 2
 
-# Screen reach margins (normalized 0.0 - 1.0)
+# Screen reach margins (normalized 0.0 to 1.0)
 margin_x_min, margin_x_max = 0.18, 0.82
 margin_y_min, margin_y_max = 0.18, 0.75
 
@@ -92,18 +137,14 @@ margin_y_min, margin_y_max = 0.18, 0.75
 
 while True:
     success, frame = cap.read()
-
     if not success:
         time.sleep(0.01)
         continue
 
-    # Mirror camera
+    # Mirror camera feed horizontally
     frame = cv2.flip(frame, 1)
 
-    # =================================================
-    # HAND DETECTION
-    # =================================================
-
+    # Detect hand landmarks
     frame, landmarks = hand_detector.detect_hand(frame)
     gesture = "NO HAND"
 
@@ -126,102 +167,73 @@ while True:
         pinky_pip = landmarks[18]
 
         # -------------------------------------------------
-        # ROBUST FINGER STATE DETECTION
+        # FINGER EXTENSION STATUS
         # -------------------------------------------------
         index_up = index_tip.y < index_pip.y
         middle_up = middle_tip.y < middle_pip.y
         ring_up = ring_tip.y < ring_pip.y
         pinky_up = pinky_tip.y < pinky_pip.y
 
-        # Accurate fist detection: tips are below or level with knuckles (MCP joints)
+        # Fist detection
         index_down = index_tip.y > index_pip.y or index_tip.y > index_mcp.y
         middle_down = middle_tip.y > middle_pip.y or middle_tip.y > middle_mcp.y
         ring_down = ring_tip.y > ring_pip.y or ring_tip.y > ring_mcp.y
         pinky_down = pinky_tip.y > pinky_pip.y or pinky_tip.y > pinky_mcp.y
         is_fist = index_down and middle_down and ring_down and pinky_down
 
-        # -------------------------------------------------
-        # PINCH
-        # -------------------------------------------------
-        dx = thumb_tip.x - index_tip.x
-        dy = thumb_tip.y - index_tip.y
-        distance = math.sqrt(dx * dx + dy * dy)
-        pinch = distance < 0.055
+        # Left Click Pinch (Thumb + Index)
+        dist_thumb_index = math.hypot(thumb_tip.x - index_tip.x, thumb_tip.y - index_tip.y)
+        pinch_thumb_index = dist_thumb_index < 0.055
 
-        # -------------------------------------------------
-        # THUMBS UP DETECTION
-        # -------------------------------------------------
-        # Thumb tip is clearly above its base joint and above wrist
         thumb_up = (thumb_tip.y < landmarks[3].y) and (thumb_tip.y < landmarks[2].y)
 
         now = time.time()
 
         # =================================================
-        # 4 FINGERS -> SWIPE (TASK VIEW / DESKTOP / APP SWITCH)
+        # 1. 4 FINGERS / OPEN PALM GESTURES (SWIPES)
         # =================================================
         if index_up and middle_up and ring_up and pinky_up:
-            gesture = "4 FINGERS - GESTURE"
+            gesture = "4 FINGERS / PALM"
 
             if swipe_start_x is None or swipe_start_y is None:
-                swipe_start_x = middle_tip.x
-                swipe_start_y = middle_tip.y
+                swipe_start_x = middle_mcp.x
+                swipe_start_y = middle_mcp.y
             else:
-                diff_x = middle_tip.x - swipe_start_x
-                diff_y = middle_tip.y - swipe_start_y
+                diff_x = middle_mcp.x - swipe_start_x
+                diff_y = middle_mcp.y - swipe_start_y
 
                 if now - last_swipe > swipe_delay:
-                    # Swipe Up -> Task View
+                    # Swipe Up -> Task View / Mission Control
                     if diff_y < -0.15:
-                        pyautogui.hotkey("win", "tab")
-                        print("ACTION: Task View (Win + Tab)")
+                        open_task_view()
+                        print("ACTION: Task View")
                         last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
+                        swipe_start_x = None
+                        swipe_start_y = None
 
                     # Swipe Down -> Show Desktop
                     elif diff_y > 0.15:
-                        pyautogui.hotkey("win", "d")
-                        print("ACTION: Show Desktop (Win + D)")
+                        show_desktop()
+                        print("ACTION: Show Desktop")
                         last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
+                        swipe_start_x = None
+                        swipe_start_y = None
 
-                    # Swipe Left / Right -> Alt + Tab
-                    elif diff_x > 0.15:
-                        pyautogui.hotkey("alt", "tab")
-                        print("ACTION: App Switch (Alt + Tab)")
+                    # Swipe Right -> Next Virtual Desktop
+                    elif diff_x > 0.12:
+                        switch_desktop("right")
+                        print("ACTION: Next Desktop")
                         last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
-                    elif diff_x < -0.15:
-                        pyautogui.hotkey("alt", "shift", "tab")
-                        print("ACTION: Previous App (Alt + Shift + Tab)")
-                        last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
+                        swipe_start_x = None
+                        swipe_start_y = None
 
-        # =================================================
-        # 3 FINGERS -> SWIPE DESKTOP (VIRTUAL WORKSPACES)
-        # =================================================
-        elif index_up and middle_up and ring_up and not pinky_up:
-            gesture = "3 FINGERS - SWIPE DESKTOP"
-
-            if swipe_start_x is None or swipe_start_y is None:
-                swipe_start_x = middle_tip.x
-                swipe_start_y = middle_tip.y
-            else:
-                diff_x = middle_tip.x - swipe_start_x
-
-                if now - last_swipe > swipe_delay:
-                    # Swipe Right -> Next Desktop
-                    if diff_x > 0.12:
-                        pyautogui.hotkey("ctrl", "win", "right")
-                        print("ACTION: Switch to Next Desktop")
-                        last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
-
-                    # Swipe Left -> Previous Desktop
+                    # Swipe Left -> Previous Virtual Desktop
                     elif diff_x < -0.12:
-                        pyautogui.hotkey("ctrl", "win", "left")
-                        print("ACTION: Switch to Previous Desktop")
+                        switch_desktop("left")
+                        print("ACTION: Previous Desktop")
                         last_swipe = now
-                        swipe_start_x, swipe_start_y = None, None
+                        swipe_start_x = None
+                        swipe_start_y = None
 
         else:
             # Reset swipe coordinates
@@ -229,27 +241,66 @@ while True:
             swipe_start_y = None
 
             # =============================================
-            # THUMBS UP -> SCREENSHOT CAPTURE
+            # 2. MIDDLE FINGER ONLY -> TAKE SCREENSHOT
             # =============================================
             if (
-                thumb_up
+                middle_up
+                and not index_up
+                and not ring_up
+                and not pinky_up
+                and not pinch_thumb_index
+            ):
+                gesture = "MIDDLE FINGER - SCREENSHOT"
+                if now - last_screenshot > screenshot_delay:
+                    user_home = os.path.expanduser("~")
+                    desktop_onedrive = os.path.join(user_home, "OneDrive", "Desktop")
+                    desktop_default = os.path.join(user_home, "Desktop")
+
+                    if os.path.exists(desktop_onedrive):
+                        save_dir = desktop_onedrive
+                    elif os.path.exists(desktop_default):
+                        save_dir = desktop_default
+                    else:
+                        save_dir = os.path.join(os.getcwd(), "screenshots")
+                        os.makedirs(save_dir, exist_ok=True)
+
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = os.path.join(save_dir, f"screenshot_{timestamp}.png")
+
+                    screenshot = pyautogui.screenshot()
+                    screenshot.save(filename)
+
+                    print("SCREENSHOT SAVED TO:", filename)
+                    last_screenshot = now
+
+            # =============================================
+            # 3. PINKY ONLY -> SEARCH (Win+S / Spotlight)
+            # =============================================
+            elif (
+                pinky_up
                 and not index_up
                 and not middle_up
                 and not ring_up
-                and not pinky_up
+                and not pinch_thumb_index
             ):
-                gesture = "THUMBS UP - CAPTURE"
-                if now - last_capture > capture_delay:
-                    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = os.path.join(desktop, f"hand_capture_{timestamp}.jpg")
-
-                    cv2.imwrite(filename, frame)
-                    print("PHOTO SAVED:", filename)
-                    last_capture = now
+                gesture = "PINKY - SEARCH"
+                if now - last_search > search_delay:
+                    press_search()
+                    print("ACTION: Open Search (Win+S / Spotlight)")
+                    last_search = now
 
             # =============================================
-            # FIST -> VOLUME DOWN
+            # 4. THUMB + INDEX PINCH -> LEFT CLICK
+            # =============================================
+            elif pinch_thumb_index:
+                gesture = "THUMB+INDEX - LEFT CLICK"
+                if now - last_click > click_delay:
+                    pyautogui.click()
+                    print("LEFT CLICK")
+                    last_click = now
+
+            # =============================================
+            # 5. FIST -> VOLUME DOWN
             # =============================================
             elif is_fist and not thumb_up:
                 gesture = "FIST - VOLUME DOWN"
@@ -260,17 +311,7 @@ while True:
                     last_volume = now
 
             # =============================================
-            # PINCH -> CLICK
-            # =============================================
-            elif pinch:
-                gesture = "PINCH - CLICK"
-                if now - last_click > click_delay:
-                    pyautogui.click()
-                    print("LEFT CLICK")
-                    last_click = now
-
-            # =============================================
-            # 2 FINGERS -> VOLUME UP
+            # 6. 2 FINGERS (INDEX + MIDDLE) -> VOLUME UP
             # =============================================
             elif (
                 index_up
@@ -286,7 +327,7 @@ while True:
                     last_volume = now
 
             # =============================================
-            # INDEX ONLY -> HIGH ACCURACY MOUSE
+            # 7. INDEX ONLY -> HIGH ACCURACY MOUSE
             # =============================================
             elif (
                 index_up
@@ -296,15 +337,12 @@ while True:
             ):
                 gesture = "INDEX - MOUSE"
 
-                # Map index coordinates across bounds
                 target_x = np.interp(index_tip.x, (margin_x_min, margin_x_max), (0, screen_width))
                 target_y = np.interp(index_tip.y, (margin_y_min, margin_y_max), (0, screen_height))
 
-                # Smooth movements
                 current_x = previous_x + (target_x - previous_x) / smoothening
                 current_y = previous_y + (target_y - previous_y) / smoothening
 
-                # Deadzone filter to stop idle trembling
                 if abs(current_x - previous_x) > deadzone or abs(current_y - previous_y) > deadzone:
                     clamped_x = max(0, min(screen_width - 1, int(current_x)))
                     clamped_y = max(0, min(screen_height - 1, int(current_y)))
@@ -314,18 +352,19 @@ while True:
                     previous_y = current_y
 
     # =====================================================
-    # HUD DISPLAY
+    # HUD / ON-SCREEN INSTRUCTIONS
     # =====================================================
 
-    cv2.putText(frame, f"Gesture: {gesture}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
-    cv2.putText(frame, "1 Finger: Accurate Mouse", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "Pinch: Click", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "Thumbs Up: Screenshot Capture", (20, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "2 Fingers: Volume Up", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "Fist: Volume Down", (20, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "3 Fingers: Swipe Desktops (L/R)", (20, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "4 Fingers: Up(TaskView)/Down(Desktop)/L-R(AltTab)", (20, 225), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 1)
-    cv2.putText(frame, "Press Q to Exit", (20, 255), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+    cv2.putText(frame, f"Gesture: {gesture}", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.70, (0, 255, 0), 2)
+    cv2.putText(frame, "Index Finger: Move Mouse", (20, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "Thumb + Index: Left Click", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "Pinky Finger: Search (Win+S / Spotlight)", (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "Middle Finger Only: Take Screenshot", (20, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "2 Fingers: Volume Up", (20, 135), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "Fist: Volume Down", (20, 155), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "4 Fingers/Palm L/R: Switch Desktop", (20, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "4 Fingers Up/Down: TaskView / Desktop", (20, 195), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+    cv2.putText(frame, "Press Q to Exit", (20, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (0, 0, 255), 2)
 
     cv2.imshow("Hand Gesture Controller", frame)
 
