@@ -96,7 +96,7 @@ previous_x = screen_width // 2
 previous_y = screen_height // 2
 
 smoothening = 3  # Lower value = sharper, more responsive tracking
-deadzone = 3     # Pixel threshold: ignores involuntary hand twitches
+deadzone = 2     # Pixel threshold: ignores involuntary hand twitches
 
 # Screen reach margins (normalized 0.0 - 1.0)
 margin_x_min, margin_x_max = 0.18, 0.82
@@ -158,8 +158,8 @@ while True:
         thumb_up = thumb_tip.y < landmarks[3].y
         now = time.time()
 
-       # =================================================
-        # 4 FINGERS → SWIPE (TASK VIEW / DESKTOP TOGGLE / APP SWITCH)
+        # =================================================
+        # 4 FINGERS -> SWIPE (TASK VIEW / DESKTOP / APP SWITCH)
         # =================================================
         if index_up and middle_up and ring_up and pinky_up:
             gesture = "4 FINGERS - GESTURE"
@@ -199,7 +199,7 @@ while True:
                         swipe_start_x, swipe_start_y = None, None
 
         # =================================================
-        # 3 FINGERS → SWIPE DESKTOP (VIRTUAL WORKSPACES)
+        # 3 FINGERS -> SWIPE DESKTOP (VIRTUAL WORKSPACES)
         # =================================================
         elif index_up and middle_up and ring_up and not pinky_up:
             gesture = "3 FINGERS - SWIPE DESKTOP"
@@ -224,6 +224,11 @@ while True:
                         print("ACTION: Switch to Previous Desktop")
                         last_swipe = now
                         swipe_start_x, swipe_start_y = None, None
+
+        else:
+            # Reset swipe coordinates whenever leaving 3-finger / 4-finger modes
+            swipe_start_x = None
+            swipe_start_y = None
 
             # =============================================
             # THUMBS UP -> SCREENSHOT CAPTURE
