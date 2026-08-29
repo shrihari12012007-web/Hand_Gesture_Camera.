@@ -53,23 +53,6 @@ hand_detector = HandGesture()
 
 
 # =====================================================
-# VOLUME
-# =====================================================
-
-try:
-    from pycaw.pycaw import AudioUtilities
-
-    devices = AudioUtilities.GetSpeakers()
-    volume = devices.EndpointVolume
-    volume_available = True
-    print("Windows volume control: ON")
-
-except Exception as e:
-    volume_available = False
-    print("Volume control unavailable:", e)
-
-
-# =====================================================
 # TIMERS & SWIPE STATE
 # =====================================================
 
@@ -80,8 +63,8 @@ last_swipe = 0
 
 capture_delay = 2.0
 click_delay = 0.5
-volume_delay = 0.4
-swipe_delay = 0.8  # Cooldown between swipe gestures
+volume_delay = 0.25  # Fast and responsive volume adjustments
+swipe_delay = 0.8
 
 # Swipe tracking variables
 swipe_start_x = None
@@ -95,8 +78,8 @@ swipe_start_y = None
 previous_x = screen_width // 2
 previous_y = screen_height // 2
 
-smoothening = 3  # Lower value = sharper, more responsive tracking
-deadzone = 2     # Pixel threshold: ignores involuntary hand twitches
+smoothening = 3
+deadzone = 2
 
 # Screen reach margins (normalized 0.0 - 1.0)
 margin_x_min, margin_x_max = 0.18, 0.82
@@ -125,11 +108,17 @@ while True:
     gesture = "NO HAND"
 
     if landmarks:
+        wrist = landmarks[0]
         thumb_tip = landmarks[4]
         index_tip = landmarks[8]
         middle_tip = landmarks[12]
         ring_tip = landmarks[16]
         pinky_tip = landmarks[20]
+
+        index_mcp = landmarks[5]
+        middle_mcp = landmarks[9]
+        ring_mcp = landmarks[13]
+        pinky_mcp = landmarks[17]
 
         index_pip = landmarks[6]
         middle_pip = landmarks[10]
@@ -137,12 +126,19 @@ while True:
         pinky_pip = landmarks[18]
 
         # -------------------------------------------------
-        # FINGER DETECTION
+        # ROBUST FINGER STATE DETECTION
         # -------------------------------------------------
         index_up = index_tip.y < index_pip.y
         middle_up = middle_tip.y < middle_pip.y
         ring_up = ring_tip.y < ring_pip.y
         pinky_up = pinky_tip.y < pinky_pip.y
+
+        # Accurate fist detection: tips are below or level with knuckles (MCP joints)
+        index_down = index_tip.y > index_pip.y or index_tip.y > index_mcp.y
+        middle_down = middle_tip.y > middle_pip.y or middle_tip.y > middle_mcp.y
+        ring_down = ring_tip.y > ring_pip.y or ring_tip.y > ring_mcp.y
+        pinky_down = pinky_tip.y > pinky_pip.y or pinky_tip.y > pinky_mcp.y
+        is_fist = index_down and middle_down and ring_down and pinky_down
 
         # -------------------------------------------------
         # PINCH
@@ -153,9 +149,11 @@ while True:
         pinch = distance < 0.055
 
         # -------------------------------------------------
-        # THUMB
+        # THUMBS UP DETECTION
         # -------------------------------------------------
-        thumb_up = thumb_tip.y < landmarks[3].y
+        # Thumb tip is clearly above its base joint and above wrist
+        thumb_up = (thumb_tip.y < landmarks[3].y) and (thumb_tip.y < landmarks[2].y)
+
         now = time.time()
 
         # =================================================
@@ -226,7 +224,7 @@ while True:
                         swipe_start_x, swipe_start_y = None, None
 
         else:
-            # Reset swipe coordinates whenever leaving 3-finger / 4-finger modes
+            # Reset swipe coordinates
             swipe_start_x = None
             swipe_start_y = None
 
@@ -239,7 +237,6 @@ while True:
                 and not middle_up
                 and not ring_up
                 and not pinky_up
-                and not pinch
             ):
                 gesture = "THUMBS UP - CAPTURE"
                 if now - last_capture > capture_delay:
@@ -252,6 +249,17 @@ while True:
                     last_capture = now
 
             # =============================================
+            # FIST -> VOLUME DOWN
+            # =============================================
+            elif is_fist and not thumb_up:
+                gesture = "FIST - VOLUME DOWN"
+                if now - last_volume > volume_delay:
+                    pyautogui.press("volumedown")
+                    pyautogui.press("volumedown")
+                    print("VOLUME: DOWN (-)")
+                    last_volume = now
+
+            # =============================================
             # PINCH -> CLICK
             # =============================================
             elif pinch:
@@ -260,6 +268,22 @@ while True:
                     pyautogui.click()
                     print("LEFT CLICK")
                     last_click = now
+
+            # =============================================
+            # 2 FINGERS -> VOLUME UP
+            # =============================================
+            elif (
+                index_up
+                and middle_up
+                and not ring_up
+                and not pinky_up
+            ):
+                gesture = "TWO FINGERS - VOLUME UP"
+                if now - last_volume > volume_delay:
+                    pyautogui.press("volumeup")
+                    pyautogui.press("volumeup")
+                    print("VOLUME: UP (+)")
+                    last_volume = now
 
             # =============================================
             # INDEX ONLY -> HIGH ACCURACY MOUSE
@@ -289,38 +313,6 @@ while True:
                     previous_x = current_x
                     previous_y = current_y
 
-           # =============================================
-            # 2 FINGERS -> VOLUME UP
-            # =============================================
-            elif (
-                index_up
-                and middle_up
-                and not ring_up
-                and not pinky_up
-            ):
-                gesture = "TWO FINGERS - VOLUME UP"
-                if now - last_volume > volume_delay:
-                    pyautogui.press("volumeup")
-                    pyautogui.press("volumeup")  # Twice for a faster volume step
-                    print("VOLUME: UP (+)")
-                    last_volume = now
-
-            # =============================================
-            # FIST -> VOLUME DOWN
-            # =============================================
-            elif (
-                not index_up
-                and not middle_up
-                and not ring_up
-                and not pinky_up
-            ):
-                gesture = "FIST - VOLUME DOWN"
-                if now - last_volume > volume_delay:
-                    pyautogui.press("volumedown")
-                    pyautogui.press("volumedown")  # Twice for a faster volume step
-                    print("VOLUME: DOWN (-)")
-                    last_volume = now
-
     # =====================================================
     # HUD DISPLAY
     # =====================================================
@@ -328,9 +320,12 @@ while True:
     cv2.putText(frame, f"Gesture: {gesture}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
     cv2.putText(frame, "1 Finger: Accurate Mouse", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
     cv2.putText(frame, "Pinch: Click", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "3 Fingers: Swipe Desktops (Left/Right)", (20, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "4 Fingers: Swipe Up (Task View) / Down (Desktop)", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    cv2.putText(frame, "Press Q to Exit", (20, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+    cv2.putText(frame, "Thumbs Up: Screenshot Capture", (20, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+    cv2.putText(frame, "2 Fingers: Volume Up", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+    cv2.putText(frame, "Fist: Volume Down", (20, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+    cv2.putText(frame, "3 Fingers: Swipe Desktops (L/R)", (20, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
+    cv2.putText(frame, "4 Fingers: Up(TaskView)/Down(Desktop)/L-R(AltTab)", (20, 225), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 1)
+    cv2.putText(frame, "Press Q to Exit", (20, 255), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
 
     cv2.imshow("Hand Gesture Controller", frame)
 
