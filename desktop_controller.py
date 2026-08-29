@@ -158,13 +158,13 @@ while True:
         thumb_up = thumb_tip.y < landmarks[3].y
         now = time.time()
 
-        # =================================================
+       # =================================================
         # 4 FINGERS → SWIPE (TASK VIEW / DESKTOP TOGGLE / APP SWITCH)
         # =================================================
         if index_up and middle_up and ring_up and pinky_up:
             gesture = "4 FINGERS - GESTURE"
 
-            if swipe_start_x is None:
+            if swipe_start_x is None or swipe_start_y is None:
                 swipe_start_x = middle_tip.x
                 swipe_start_y = middle_tip.y
             else:
@@ -204,8 +204,9 @@ while True:
         elif index_up and middle_up and ring_up and not pinky_up:
             gesture = "3 FINGERS - SWIPE DESKTOP"
 
-            if swipe_start_x is None:
+            if swipe_start_x is None or swipe_start_y is None:
                 swipe_start_x = middle_tip.x
+                swipe_start_y = middle_tip.y
             else:
                 diff_x = middle_tip.x - swipe_start_x
 
@@ -215,19 +216,14 @@ while True:
                         pyautogui.hotkey("ctrl", "win", "right")
                         print("ACTION: Switch to Next Desktop")
                         last_swipe = now
-                        swipe_start_x = None
+                        swipe_start_x, swipe_start_y = None, None
 
                     # Swipe Left -> Previous Desktop
                     elif diff_x < -0.12:
                         pyautogui.hotkey("ctrl", "win", "left")
                         print("ACTION: Switch to Previous Desktop")
                         last_swipe = now
-                        swipe_start_x = None
-
-        else:
-            # Reset swipe coordinates when fingers change
-            swipe_start_x = None
-            swipe_start_y = None
+                        swipe_start_x, swipe_start_y = None, None
 
             # =============================================
             # THUMBS UP -> SCREENSHOT CAPTURE
