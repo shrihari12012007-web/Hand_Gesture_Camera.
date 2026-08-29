@@ -21,13 +21,9 @@ opencv-contrib-python==5.0.0.93
 opencv-python==5.0.0.93
 packaging==26.3
 pillow==12.3.0
-PyAutoGUI==0.9.54
 pycparser==3.0
 PyGetWindow==0.0.9
 PyMsgBox==2.0.1
-pyobjc-core==12.2.2
-pyobjc-framework-Cocoa==12.2.2
-pyobjc-framework-Quartz==12.2.2
 pyparsing==3.3.2
 pyperclip==1.11.0
 PyRect==0.2.0
