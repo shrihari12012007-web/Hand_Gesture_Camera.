@@ -3,13 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Hand Gesture Camera Demo</title>
-  
-  <!-- MediaPipe CDN scripts for browser hand tracking -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
+  <title>Live Hand Gesture Controller</title>
   <style>
     body {
       margin: 0;
@@ -19,130 +13,206 @@
       color: #f8fafc;
       text-align: center;
     }
-    h1 { color: #38bdf8; margin-bottom: 5px; }
+    h1 { color: #38bdf8; margin-bottom: 6px; }
     p { color: #94a3b8; margin-top: 0; }
+    .status-box {
+      margin: 15px auto;
+      padding: 12px 20px;
+      max-width: 520px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #38bdf8;
+    }
     .container {
       position: relative;
       display: inline-block;
-      margin-top: 15px;
       border-radius: 12px;
       overflow: hidden;
       border: 2px solid #38bdf8;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      background: #000;
+      max-width: 90vw;
     }
-    #input_video {
-      display: none; /* hidden; canvas draws mirrored feed */
+    video {
+      display: none;
     }
-    #output_canvas {
+    canvas {
+      display: block;
       width: 100%;
       max-width: 720px;
       height: auto;
-      display: block;
-      transform: scaleX(-1); /* mirror video */
-    }
-    .status-box {
-      margin: 15px auto;
-      padding: 12px;
-      max-width: 400px;
-      background: #1e293b;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: bold;
-      color: #4ade80;
+      transform: scaleX(-1); /* Mirror camera */
     }
     .btn {
       display: inline-block;
-      margin-top: 15px;
-      padding: 10px 20px;
+      margin-top: 20px;
+      padding: 10px 22px;
       background: #38bdf8;
       color: #0f172a;
       text-decoration: none;
       border-radius: 6px;
-      font-weight: bold;
+      font-weight: 700;
     }
   </style>
-</head>
-<body>
 
-  <h1>Live Hand Gesture Camera</h1>
-  <p>Allow camera access in your browser to test live hand detection</p>
+  <!-- Load MediaPipe Tasks-Vision Module -->
+  <script type="module">
+    import {
+      HandLandmarker,
+      FilesetResolver
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-  <div class="status-box" id="gesture_status">Detecting Hands...</div>
+    const video = document.getElementById("webcam");
+    const canvas = document.getElementById("output_canvas");
+    const ctx = canvas.getContext("2d");
+    const statusText = document.getElementById("gesture_status");
 
-  <div class="container">
-    <video id="input_video" playsinline></video>
-    <canvas id="output_canvas" width="1280" height="720"></canvas>
-  </div>
+    let handLandmarker = undefined;
+    let lastVideoTime = -1;
 
-  <br>
-  <a class="btn" href="https://github.com/shrihari12012007-web/Hand_Gesture_Camera.">View Full Python Code on GitHub</a>
+    // Hand Landmark skeleton connection pairs
+    const HAND_CONNECTIONS = [
+      [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
+      [0, 5], [5, 6], [6, 7], [7, 8],       // Index
+      [5, 9], [9, 10], [10, 11], [11, 12],  // Middle
+      [9, 13], [13, 14], [14, 15], [15, 16],// Ring
+      [13, 17], [17, 18], [18, 19], [19, 20],// Pinky
+      [0, 17]                               // Palm base
+    ];
 
-  <script>
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const statusText = document.getElementById('gesture_status');
+    async function initializeHandLandmarker() {
+      statusText.innerText = "Loading AI Vision Models...";
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
 
-    function onResults(results) {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+          delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numHands: 1
+      });
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        for (const landmarks of results.multiHandLandmarks) {
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-          drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2, radius: 4});
+      startCamera();
+    }
 
-          // Basic Finger Up/Down detection
+    async function startCamera() {
+      statusText.innerText = "Requesting Camera Access...";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1280, height: 720 }
+        });
+        video.srcObject = stream;
+        video.addEventListener("loadeddata", () => {
+          video.play();
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          statusText.innerText = "Ready! Show hand to camera";
+          predictWebcam();
+        });
+      } catch (err) {
+        statusText.innerText = "Camera access denied or unavailable: " + err.message;
+        statusText.style.color = "#f87171";
+      }
+    }
+
+    function predictWebcam() {
+      if (video.currentTime !== lastVideoTime && handLandmarker) {
+        lastVideoTime = video.currentTime;
+        const results = handLandmarker.detectForVideo(video, performance.now());
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        if (results.landmarks && results.landmarks.length > 0) {
+          const landmarks = results.landmarks[0];
+
+          // Draw skeleton lines
+          ctx.strokeStyle = "#00FF66";
+          ctx.lineWidth = 4;
+          for (const [start, end] of HAND_CONNECTIONS) {
+            const p1 = landmarks[start];
+            const p2 = landmarks[end];
+            ctx.beginPath();
+            ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+            ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+            ctx.stroke();
+          }
+
+          // Draw joint points
+          ctx.fillStyle = "#FF0033";
+          for (const p of landmarks) {
+            ctx.beginPath();
+            ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+
+          // Gesture Logic
           const indexUp = landmarks[8].y < landmarks[6].y;
           const middleUp = landmarks[12].y < landmarks[10].y;
           const ringUp = landmarks[16].y < landmarks[14].y;
           const pinkyUp = landmarks[20].y < landmarks[18].y;
 
-          if (indexUp && !middleUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "Gesture Detected: INDEX FINGER (Mouse Move)";
+          // Pinch distance (Thumb Tip to Index Tip)
+          const dx = landmarks[4].x - landmarks[8].x;
+          const dy = landmarks[4].y - landmarks[8].y;
+          const pinchDist = Math.sqrt(dx * dx + dy * dy);
+          const isPinch = pinchDist < 0.055;
+
+          if (isPinch) {
+            statusText.innerText = "🤏 PINCH: Left Click";
+            statusText.style.color = "#fbbf24";
+          } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+            statusText.innerText = "☝️ INDEX: Move Mouse Cursor";
+            statusText.style.color = "#4ade80";
           } else if (middleUp && !indexUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "Gesture Detected: MIDDLE FINGER (Screenshot)";
+            statusText.innerText = "📸 MIDDLE FINGER: Take Screenshot";
+            statusText.style.color = "#f472b6";
           } else if (pinkyUp && !indexUp && !middleUp && !ringUp) {
-            statusText.innerText = "Gesture Detected: PINKY FINGER (Search)";
+            statusText.innerText = "🔍 PINKY: Open System Search";
+            statusText.style.color = "#a78bfa";
           } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "Gesture Detected: 2 FINGERS (Volume Up)";
+            statusText.innerText = "✌️ 2 FINGERS: Volume Up";
+            statusText.style.color = "#38bdf8";
           } else if (indexUp && middleUp && ringUp && pinkyUp) {
-            statusText.innerText = "Gesture Detected: 4 FINGERS / PALM (Desktop Switch)";
+            statusText.innerText = "🖐️ PALM / 4 FINGERS: Switch Desktop";
+            statusText.style.color = "#38bdf8";
           } else if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "Gesture Detected: FIST (Volume Down)";
+            statusText.innerText = "✊ FIST: Volume Down";
+            statusText.style.color = "#f87171";
           } else {
-            statusText.innerText = "Hands Tracking Active";
+            statusText.innerText = "Hand Tracking Active";
+            statusText.style.color = "#38bdf8";
           }
+        } else {
+          statusText.innerText = "No hand detected — place hand in front of camera";
+          statusText.style.color = "#94a3b8";
         }
-      } else {
-        statusText.innerText = "No Hand Detected - Show Hand to Camera";
       }
-      canvasCtx.restore();
+      requestAnimationFrame(predictWebcam);
     }
 
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
-    });
-
-    hands.onResults(onResults);
-
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({image: videoElement});
-      },
-      width: 1280,
-      height: 720
-    });
-
-    camera.start();
+    initializeHandLandmarker();
   </script>
+</head>
+<body>
+
+  <h1>Live Hand Gesture Recognizer</h1>
+  <p>Real-time client-side hand tracking running directly in your browser</p>
+
+  <div class="status-box" id="gesture_status">Initializing AI Engine...</div>
+
+  <div class="container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+  </div>
+
+  <br>
+  <a class="btn" href="https://github.com/shrihari12012007-web/Hand_Gesture_Camera.">View Source Code on GitHub</a>
+
 </body>
 </html>
