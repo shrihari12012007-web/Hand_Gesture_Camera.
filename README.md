@@ -1,4 +1,4 @@
-# Hand Gesture Camera & Desktop Controller
+# :hand: Hand Gesture Camera & Desktop Controller :camera:
 
 <div align="center">
   <img src="https://img.shields.io/badge/AI_Vision-MediaPipe-00897B?style=for-the-badge&logo=google&logoColor=white" alt="MediaPipe" />
@@ -12,24 +12,24 @@ An advanced computer vision system enabling **touchless hand gesture control** f
 
 ---
 
-## Key Capabilities
+## :sparkles: Key Capabilities
 
-- **Real-Time 21-Landmark Hand Tracking:** High precision 3D hand landmark coordinate estimation.
-- **Desktop Control Mode (desktop_controller.py):** Control media, volume, navigation, or mouse movement touchlessly via gesture signals.
-- **Mobile Web Stream Mode (mobile_controller.py):** Stream camera feeds and trigger actions through a lightweight web interface.
-- **Low Latency Inference:** Optimized for smooth real-time FPS on consumer webcams without dedicated GPUs.
-
----
-
-## Tech Stack
-
-- **Vision Pipeline:** Google MediaPipe (hand_landmarker.task), OpenCV (cv2)
-- **Backend / Stream:** Python 3.x, Flask
-- **Frontend Controller:** HTML5, CSS3, JavaScript
+- :dart: **Real-Time 21-Landmark Hand Tracking:** High precision 3D hand landmark coordinate estimation.
+- :desktop_computer: **Desktop Control Mode (`desktop_controller.py`):** Control media, volume, navigation, or mouse movement touchlessly via gesture signals.
+- :iphone: **Mobile Web Stream Mode (`mobile_controller.py`):** Stream camera feeds and trigger actions through a lightweight web interface.
+- :zap: **Low Latency Inference:** Optimized for smooth real-time FPS on consumer webcams without dedicated GPUs.
 
 ---
 
-## Quickstart Guide
+## :hammer_and_wrench: Tech Stack
+
+- :robot: **Vision Pipeline:** Google MediaPipe (`hand_landmarker.task`), OpenCV (`cv2`)
+- :snake: **Backend / Stream:** Python 3.x, Flask
+- :art: **Frontend Controller:** HTML5, CSS3, JavaScript
+
+---
+
+## :rocket: Quickstart Guide
 
 1. **Clone the repository:**
    ```bash
@@ -63,4 +63,4 @@ An advanced computer vision system enabling **touchless hand gesture control** f
 
 ---
 
-Developed by Shree Hari S B
+:star: Developed by Shree Hari S B
