@@ -1,156 +1,376 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Interactive Hand Gesture Showcase</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Gesture Camera | AI Computer Vision Controller</title>
   
+  <!-- MediaPipe Hands & Camera Utils -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
   <style>
-    body {
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(18, 24, 38, 0.75);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #06b6d4;
+      --accent-glow: rgba(6, 182, 212, 0.25);
+      --green: #10b981;
+      --rose: #f43f5e;
+    }
+
+    * {
       margin: 0;
-      padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at 50% 20%, #111827 0%, #090d16 100%);
       color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 60px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+
+    header {
       text-align: center;
     }
-    h1 { color: #38bdf8; margin-bottom: 5px; }
-    p { color: #94a3b8; margin-top: 0; }
-    
-    .status-bar {
-      margin: 12px auto;
-      padding: 12px 24px;
-      max-width: 500px;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: bold;
-      color: #4ade80;
+
+    h1 {
+      font-size: clamp(24px, 4vw, 36px);
+      font-weight: 800;
+      background: linear-gradient(135deg, #ffffff 30%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
     }
 
+    p.subtitle {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    /* Status Banner */
+    .status-bar {
+      width: 100%;
+      padding: 12px 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--accent);
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+
+    .active-gesture {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    /* Video & Canvas Stage */
     .main-stage {
       position: relative;
-      display: inline-block;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #38bdf8;
-      background: #000;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-    }
-    #input_video { display: none; }
-    #output_canvas {
-      display: block;
       width: 100%;
-      max-width: 720px;
-      height: auto;
-      transform: scaleX(-1);
+      max-width: 800px;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1.5px solid var(--border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px var(--accent-glow);
     }
 
-    /* Virtual In-Browser Elements */
+    #input_video {
+      display: none;
+    }
+
+    #output_canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Natural mirror */
+    }
+
+    /* Virtual Cursor */
     #virtual_cursor {
       position: absolute;
-      width: 22px;
-      height: 22px;
-      background: rgba(56, 189, 248, 0.8);
-      border: 2px solid #ffffff;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
+      background: rgba(6, 182, 212, 0.85);
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 15px var(--accent);
       pointer-events: none;
       transform: translate(-50%, -50%);
       display: none;
-      transition: width 0.1s, height 0.1s;
       z-index: 10;
-    }
-    #virtual_cursor.clicking {
-      background: rgba(239, 68, 68, 0.9);
-      width: 32px;
-      height: 32px;
+      transition: width 0.12s, height 0.12s, background-color 0.12s;
     }
 
-    /* Interactive Volume Demo */
-    .controls-demo {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 15px;
-      margin: 15px auto;
-      max-width: 450px;
-      background: #1e293b;
-      padding: 10px 20px;
-      border-radius: 8px;
+    #virtual_cursor.clicking {
+      background: rgba(244, 63, 94, 0.95);
+      width: 32px;
+      height: 32px;
+      box-shadow: 0 0 20px var(--rose);
     }
+
+    /* Camera Permission Overlay */
+    #perm_prompt {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 15, 28, 0.9);
+      padding: 24px;
+      text-align: center;
+      z-index: 20;
+    }
+
+    .btn-camera {
+      margin-top: 14px;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(6, 182, 212, 0.4);
+      transition: all 0.25s ease;
+    }
+
+    .btn-camera:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(6, 182, 212, 0.6);
+    }
+
+    /* Interactive Test Widgets */
+    .widget-panel {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .widget-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      backdrop-filter: blur(16px);
+    }
+
+    .widget-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .vol-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
     progress {
-      width: 200px;
-      height: 16px;
-      accent-color: #38bdf8;
+      flex-grow: 1;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      accent-color: var(--accent);
+    }
+
+    #vol_val {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 45px;
     }
 
     .gallery {
-      margin-top: 15px;
       display: flex;
-      justify-content: center;
       gap: 10px;
-      flex-wrap: wrap;
-    }
-    .gallery img {
-      width: 120px;
-      border-radius: 6px;
-      border: 2px solid #38bdf8;
+      overflow-x: auto;
+      min-height: 55px;
+      align-items: center;
     }
 
-    .btn {
-      display: inline-block;
-      margin-top: 15px;
-      padding: 10px 20px;
-      background: #38bdf8;
-      color: #0f172a;
-      text-decoration: none;
-      border-radius: 6px;
-      font-weight: bold;
+    .gallery img {
+      width: 90px;
+      height: 52px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1.5px solid var(--accent);
+    }
+
+    /* Cheat Sheet */
+    .cheatsheet {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 22px;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .cheatsheet strong {
+      color: #e2e8f0;
+    }
+
+    .grid-hints {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .hint-item {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
   </style>
 </head>
 <body>
 
-  <h1>Interactive Hand Gesture Controller</h1>
-  <p>Test live gestures and virtual controls directly in your browser</p>
+  <div class="container">
+    <header>
+      <h1>Hand Gesture Camera</h1>
+      <p class="subtitle">Real-time Computer Vision & Gesture Controller powered by MediaPipe</p>
+    </header>
 
-  <div class="status-bar" id="status">Loading AI Hand Detector...</div>
+    <!-- Live Telemetry Status Bar -->
+    <div class="status-bar">
+      <div class="status-badge">
+        <span class="pulse-dot"></span>
+        <span id="camera-state">Initializing AI Vision Pipeline...</span>
+      </div>
+      <div class="active-gesture" id="gesture-state">READY</div>
+    </div>
 
-  <div class="main-stage" id="stage">
-    <div id="virtual_cursor"></div>
-    <video id="input_video" playsinline></video>
-    <canvas id="output_canvas" width="1280" height="720"></canvas>
+    <!-- Main Camera & Canvas Stage -->
+    <div class="main-stage" id="stage">
+      <div id="virtual_cursor"></div>
+      <video id="input_video" playsinline muted></video>
+      <canvas id="output_canvas" width="1280" height="720"></canvas>
+
+      <!-- Permission Request / Error Banner -->
+      <div id="perm_prompt">
+        <h2>📷 Camera Access Required</h2>
+        <p style="color: #94a3b8; font-size: 14px; max-width: 420px; margin-top: 8px;">
+          Hand gesture tracking processes video locally on your device using WebAssembly. Please grant webcam permissions to begin.
+        </p>
+        <button class="btn-camera" id="btn-request-cam" onclick="startCamera()">
+          Enable Webcam Now
+        </button>
+      </div>
+    </div>
+
+    <!-- Interactive Visual Feedback Widgets -->
+    <div class="widget-panel">
+      <!-- Simulated Volume Feedback -->
+      <div class="widget-card">
+        <h3><span>🔊</span> Simulated Volume Gesture</h3>
+        <div class="vol-row">
+          <progress id="vol_bar" value="50" max="100"></progress>
+          <span id="vol_val">50%</span>
+        </div>
+        <p style="font-size: 11px; color: #64748b; margin-top: 8px;">✌️ 2 Fingers Up = Volume + | ✊ Fist = Volume -</p>
+      </div>
+
+      <!-- Gesture Screenshot Gallery -->
+      <div class="widget-card">
+        <h3><span>📸</span> Gesture Snapshots</h3>
+        <div class="gallery" id="screenshot_gallery">
+          <span style="font-size: 11px; color: #64748b;">Raise Middle Finger to trigger instant snapshot</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gesture Reference -->
+    <div class="cheatsheet">
+      <strong style="font-size: 13px;">✋ Gesture Quick Reference:</strong>
+      <div class="grid-hints">
+        <div class="hint-item"><strong>☝️ Index Finger:</strong> Move virtual cursor</div>
+        <div class="hint-item"><strong>🤏 Pinch (Thumb+Index):</strong> Virtual click</div>
+        <div class="hint-item"><strong>✌️ 2 Fingers Up:</strong> Volume Up (+)</div>
+        <div class="hint-item"><strong>✊ Closed Fist:</strong> Volume Down (-)</div>
+        <div class="hint-item"><strong>📸 Middle Finger:</strong> Save snapshot</div>
+        <div class="hint-item"><strong>🖐️ Open Palm:</strong> Desktop swipe</div>
+      </div>
+    </div>
   </div>
-
-  <div class="controls-demo">
-    <span>🔊 <b>Simulated Volume:</b></span>
-    <progress id="vol_bar" value="50" max="100"></progress>
-    <span id="vol_val">50%</span>
-  </div>
-
-  <div class="gallery" id="screenshot_gallery"></div>
-
-  <br>
-  <a class="btn" href="https://github.com/shrihari12012007-web/Hand_Gesture_Camera.">View Source on GitHub</a>
 
   <script>
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
-    const statusText = document.getElementById('status');
+    const cameraState = document.getElementById('camera-state');
+    const gestureState = document.getElementById('gesture-state');
     const cursor = document.getElementById('virtual_cursor');
     const stage = document.getElementById('stage');
     const volBar = document.getElementById('vol_bar');
     const volVal = document.getElementById('vol_val');
     const gallery = document.getElementById('screenshot_gallery');
+    const permPrompt = document.getElementById('perm_prompt');
 
     let currentVol = 50;
-    let lastSnap = 0;
+    let lastSnapTime = 0;
+    let cameraInstance = null;
 
     function onResults(results) {
       canvasCtx.save();
@@ -160,64 +380,80 @@
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
 
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF66', lineWidth: 4});
-        drawLandmarks(canvasCtx, landmarks, {color: '#FF0033', lineWidth: 2, radius: 4});
+        // Draw modern aesthetic connections
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF88', lineWidth: 3 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#06B6D4', fillColor: '#FFFFFF', lineWidth: 1.5, radius: 4 });
 
         const indexTip = landmarks[8];
         const thumbTip = landmarks[4];
+        const middleTip = landmarks[12];
+        const ringTip = landmarks[16];
+        const pinkyTip = landmarks[20];
 
-        // Move Virtual Cursor inside browser frame
+        // Virtual cursor positioning (mirrored)
         const stageRect = stage.getBoundingClientRect();
-        const cursorX = (1 - indexTip.x) * stageRect.width; // Mirrored
+        const cursorX = (1 - indexTip.x) * stageRect.width;
         const cursorY = indexTip.y * stageRect.height;
         cursor.style.display = 'block';
         cursor.style.left = `${cursorX}px`;
         cursor.style.top = `${cursorY}px`;
 
-        // Finger States
-        const indexUp = landmarks[8].y < landmarks[6].y;
-        const middleUp = landmarks[12].y < landmarks[10].y;
-        const ringUp = landmarks[16].y < landmarks[14].y;
-        const pinkyUp = landmarks[20].y < landmarks[18].y;
+        // Extension logic
+        const indexUp = indexTip.y < landmarks[6].y;
+        const middleUp = middleTip.y < landmarks[10].y;
+        const ringUp = ringTip.y < landmarks[14].y;
+        const pinkyUp = pinkyTip.y < landmarks[18].y;
 
-        // Pinch Calculation
-        const dist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
-        const isPinch = dist < 0.06;
+        const isFist = !indexUp && !middleUp && !ringUp && !pinkyUp;
+        const isPalm = indexUp && middleUp && ringUp && pinkyUp;
+
+        // Pinch calculation
+        const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+        const isPinch = pinchDist < 0.06;
 
         const now = Date.now();
 
         if (isPinch) {
-          statusText.innerText = "🤏 PINCH: Virtual Click Triggered!";
+          gestureState.innerText = "🤏 PINCH: CLICK DETECTED";
+          gestureState.style.color = "#f43f5e";
           cursor.classList.add('clicking');
         } else {
           cursor.classList.remove('clicking');
 
           if (middleUp && !indexUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "📸 MIDDLE FINGER: Browser Screenshot Captured!";
-            if (now - lastSnap > 2000) {
-              captureBrowserSnap();
-              lastSnap = now;
+            gestureState.innerText = "📸 SNAPSHOT CAPTURED";
+            gestureState.style.color = "#a855f7";
+            if (now - lastSnapTime > 1800) {
+              captureSnapshot();
+              lastSnapTime = now;
             }
-          } else if (pinkyUp && !indexUp && !middleUp && !ringUp) {
-            statusText.innerText = "🔍 PINKY: Open System Search";
           } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "✌️ 2 FINGERS: Increasing Volume (+)";
+            gestureState.innerText = "✌️ VOLUME UP (+)";
+            gestureState.style.color = "#10b981";
             currentVol = Math.min(100, currentVol + 1);
             updateVolume();
-          } else if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
-            statusText.innerText = "✊ FIST: Decreasing Volume (-)";
+          } else if (isFist) {
+            gestureState.innerText = "✊ FIST: VOLUME DOWN (-)";
+            gestureState.style.color = "#f59e0b";
             currentVol = Math.max(0, currentVol - 1);
             updateVolume();
-          } else if (indexUp && middleUp && ringUp && pinkyUp) {
-            statusText.innerText = "🖐️ PALM / 4 FINGERS: Switch Desktop";
-          } else if (indexUp) {
-            statusText.innerText = "☝️ INDEX: Moving Virtual Cursor";
+          } else if (isPalm) {
+            gestureState.innerText = "🖐️ OPEN PALM ACTIVE";
+            gestureState.style.color = "#38bdf8";
+          } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+            gestureState.innerText = "☝️ INDEX: CURSOR TRACKING";
+            gestureState.style.color = "#06b6d4";
+          } else {
+            gestureState.innerText = "HAND ACTIVE";
+            gestureState.style.color = "#94a3b8";
           }
         }
       } else {
         cursor.style.display = 'none';
-        statusText.innerText = "Show your hand to the camera to interact";
+        gestureState.innerText = "SEARCHING FOR HAND";
+        gestureState.style.color = "#64748b";
       }
+
       canvasCtx.restore();
     }
 
@@ -226,41 +462,79 @@
       volVal.innerText = `${currentVol}%`;
     }
 
-    function captureBrowserSnap() {
+    function captureSnapshot() {
       const snapUrl = canvasElement.toDataURL('image/png');
       const img = document.createElement('img');
       img.src = snapUrl;
-      img.title = "Gesture Screenshot";
+      img.title = "Gesture Snapshot";
+
+      // Clear placeholder text if present
+      if (gallery.querySelector('span')) {
+        gallery.innerHTML = '';
+      }
       gallery.prepend(img);
-      if (gallery.children.length > 3) {
+      if (gallery.children.length > 4) {
         gallery.removeChild(gallery.lastChild);
       }
     }
 
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+    // Initialize MediaPipe Hands instance
+    let handsDetector = null;
+    try {
+      handsDetector = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
 
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
-    });
+      handsDetector.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
 
-    hands.onResults(onResults);
+      handsDetector.onResults(onResults);
+    } catch (e) {
+      console.warn("MediaPipe Hands setup error", e);
+    }
 
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await hands.send({image: videoElement});
-      },
-      width: 1280,
-      height: 720
-    });
+    async function startCamera() {
+      permPrompt.style.display = "none";
+      cameraState.innerText = "Starting Camera...";
 
-    camera.start().then(() => {
-      statusText.innerText = "Ready! Place hand in view.";
-    });
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Webcam API not supported in this browser context.");
+        }
+
+        cameraInstance = new Camera(videoElement, {
+          onFrame: async () => {
+            if (handsDetector) {
+              await handsDetector.send({ image: videoElement });
+            }
+          },
+          width: 1280,
+          height: 720
+        });
+
+        await cameraInstance.start();
+        cameraState.innerText = "Camera Active & Tracking 60 FPS";
+      } catch (err) {
+        permPrompt.style.display = "flex";
+        permPrompt.innerHTML = `
+          <h2 style="color: #f43f5e;">⚠️ Camera Access Failed</h2>
+          <p style="color: #94a3b8; font-size: 13px; max-width: 440px; margin-top: 8px;">
+            ${err.message || 'Permission denied or webcam in use by another application.'}
+          </p>
+          <button class="btn-camera" onclick="startCamera()">Retry Webcam</button>
+        `;
+        cameraState.innerText = "Webcam Unavailable";
+      }
+    }
+
+    // Auto-attempt start on secure origin
+    if (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      startCamera();
+    }
   </script>
 </body>
 </html>
